@@ -30,7 +30,35 @@ async function initPool() {
 
     for (let i = 0; i < POOL_SIZE; i++) {
         try {
-            const container = await docker.createContainer({
+            const container = await getContainerCompiler(i);
+            pool.push(container);
+            console.log(`Container ${i + 1} created and started.`);
+        } catch (err) {
+            console.error(`Failed to create container ${i + 1}:`, err);
+        }
+    }
+    initializing = false;
+    console.log('Pool initialized with', pool.length, 'containers.');
+}
+async function getContainerCompiler(id){
+    const containerName = `compiler-${id}`;
+    let container;
+    container = docker.getContainer(containerName);
+    try{
+        const containerInfo = await container.inspect();
+        console.log(containerInfo.State);
+        const isRunning = containerInfo.State.Running;
+        if (!isRunning) {
+            console.log(`[INFO] Container ${containerName} exists but not running. Starting...`);
+            await container.start();
+        } else {
+            console.log(`[INFO] Container ${containerName} is already running.`);
+        }
+    }
+    catch (error) {
+        if (error.statusCode === 404){
+            container = await docker.createContainer({
+                name: containerName,
                 Image: IMAGE,
                 Tty: false,
                 WorkingDir: '/work',
@@ -41,22 +69,25 @@ async function initPool() {
                     NanoCPUs: 1e9,
                     PidsLimit: 128,
                     ReadonlyRootfs: false,
-                    Binds: [`${PROBLEMSET_DIR}:/problems:ro`, `${SUBMISSION_DIR}:/work`],
-                    Ulimits: [{ Name: 'fsize', Soft: 1048576 * 50, Hard: 1048576 * 50 }]
+                    Binds: [
+                        `${PROBLEMSET_DIR}:/problems:ro`,
+                        `${SUBMISSION_DIR}:/work`
+                    ],
+                    Ulimits: [
+                        { Name: 'fsize', Soft: 1048576 * 50, Hard: 1048576 * 50 }
+                    ]
                 },
                 Cmd: ['/bin/bash', '-c', 'sleep infinity']
             });
             await container.start();
-            pool.push(container);
-            console.log(`Container ${i + 1} created and started.`);
-        } catch (err) {
-            console.error(`Failed to create container ${i + 1}:`, err);
+        }
+        else{
+            console.error(`[ERROR] Failed to get or create container ${containerName}:`, error);
+            throw error;
         }
     }
-    initializing = false;
-    console.log('Pool initialized with', pool.length, 'containers.');
+    return container;
 }
-
 async function getContainerFromPool() {
     const release = await mutex.acquire();
     try {
