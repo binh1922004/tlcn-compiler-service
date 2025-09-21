@@ -1,27 +1,80 @@
 import path from "path";
 import fs from "fs-extra";
 import {getContainerFromPool, PROBLEMSET_DIR, releaseContainer} from "./pool.docker.js";
-async function buildCode(container, submissionId, cmd) {
+
+async function createFileInContainer(container, content, containerFilePath) {
+    // Combine mkdir và create file trong 1 command
+    const combinedCmd = `
+        mkdir -p $(dirname ${containerFilePath}) && 
+        cat > ${containerFilePath} << 'EOF'
+${content}
+        `;
+    try {
+        const createFileExec = await container.exec({
+            Cmd: ['/bin/sh', '-c', combinedCmd],
+            AttachStdout: true,
+            AttachStderr: true
+        });
+
+        const stream = await createFileExec.start();
+        let output = '', error = '';
+
+        container.modem.demuxStream(stream,
+            { write: (data) => output += data.toString() },
+            { write: (data) => error += data.toString() }
+        );
+
+        await new Promise(resolve => stream.on('end', resolve));
+        const result = await createFileExec.inspect();
+
+        if (result.ExitCode !== 0) {
+            throw new Error(`Failed to create file: ${error}`);
+        }
+
+        return true;
+
+    } catch (error) {
+        console.error(`Error creating file in container:`, error);
+        throw error;
+    }
+}
+
+async function buildCode(container, submissionId, cmd, sourceCode) {
     const start = Date.now();
     let stderr = '';
-    // Compile
-    const compile = await container.exec({
-        Cmd: ['/bin/sh', '-lc', cmd],
-        AttachStdout: true,
-        AttachStderr: true,
-        WorkingDir: `/work`
-    });
-    const streamCompile = await compile.start({ hijack: false, stdin: false });
-    container.modem.demuxStream(streamCompile, {
-        write: (data) => { stderr += data.toString('utf8'); }
-    }, {
-        write: (data) => { stderr += data.toString('utf8'); }
-    });
-    await new Promise(resolve => streamCompile.on('end', resolve));
-    const compileExit = await compile.inspect();
-    if (compileExit.ExitCode !== 0 || stderr.includes('__CE__')) {
-        console.log({ exitCode: compileExit.ExitCode, stdout: '', stderr, timeMs: Date.now() - start, timedOut: false, oomKilled: false })
-        return { exitCode: compileExit.ExitCode, stdout: '', stderr, timeMs: Date.now() - start, timedOut: false, oomKilled: false };
+    try{
+        // 1. Create source file directly in container
+        const containerSourcePath = `/work/${submissionId}/Main.cpp`;
+        await createFileInContainer(container, sourceCode, containerSourcePath);
+
+        // Compile
+        const compile = await container.exec({
+            Cmd: ['/bin/sh', '-lc', cmd],
+            AttachStdout: true,
+            AttachStderr: true,
+            WorkingDir: `/work`
+        });
+        const streamCompile = await compile.start({ hijack: false, stdin: false });
+        container.modem.demuxStream(streamCompile, {
+            write: (data) => { stderr += data.toString('utf8'); }
+        }, {
+            write: (data) => { stderr += data.toString('utf8'); }
+        });
+        await new Promise(resolve => streamCompile.on('end', resolve));
+        const compileExit = await compile.inspect();
+        if (compileExit.ExitCode !== 0 || stderr.includes('__CE__')) {
+            return { exitCode: compileExit.ExitCode, stderr, timeMs: Date.now() - start, timedOut: false, oomKilled: false };
+        }
+    }
+    catch (error){
+        console.error(`Build error for ${submissionId}:`, error);
+        return {
+            exitCode: 1,
+            stderr: `Build error: ${error.message}`,
+            timeMs: Date.now() - start,
+            timedOut: false,
+            oomKilled: false
+        };
     }
     return true;
 }
@@ -33,7 +86,7 @@ async function runCode(problemId, container, submissionId, noOfTests, limits) {
     let timedOut = false, oomKilled = false;
     const problemDir = `/problems/${problemId}`;
     for (let testId = 1; testId <= noOfTests; testId++) {
-        const inFile = `${problemDir}/in/${problemId}_${testId}.in`;
+        const inFile = `${problemDir}/inp/${problemId}_${testId}.inp`;
         const outFile = `${process.cwd()}/problemset/${problemId}/out/${problemId}_${testId}.out`;
         const execCmd = `timeout 2s bash -lc 'ulimit -v $((256*1024)); \
 /work/${submissionId}/Main < ${inFile}'`;
@@ -75,8 +128,6 @@ async function runCode(problemId, container, submissionId, noOfTests, limits) {
         const timeMs = Date.now() - start;
 
 
-        //read file from test case
-        console.log(`Test ${testId}: Got = ${got}`);
         let expected = await fs.readFile(outFile, 'utf8');
         let status = 'OK';
         if (timedOut) status = 'TLE';
@@ -99,14 +150,14 @@ async function runCode(problemId, container, submissionId, noOfTests, limits) {
     }
 
     const overall = passed === noOfTests ? 'AC' : (results.find(r => r.status === 'TLE') ? 'TLE' : 'WA');
-    return { exitCode: 0, overall, results, passed, total: noOfTests, timedOut, oomKilled };
+    return { exitCode: 0, overall, passed, total: noOfTests, timedOut, oomKilled };
 }
 
-export default async function runInContainer({ problemId, submissionId, isBuild = false, cmd, limits, noOfTests }) {
+export default async function runInContainer({ problemId, submissionId, isBuild = false, cmd, limits, noOfTests, sourceCode }) {
     const container = await getContainerFromPool();
     try{
         if (isBuild){
-            const res = await buildCode(container, submissionId, cmd);
+            const res = await buildCode(container, submissionId, cmd, sourceCode);
             await releaseContainer(container);
             if (res === true) {
                 return true;

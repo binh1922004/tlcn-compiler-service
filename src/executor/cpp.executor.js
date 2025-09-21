@@ -1,43 +1,26 @@
-import path from "path";
-import fs from "fs-extra";
+
 import {v4 as uuidv4 }from 'uuid'
 import runInContainer from "../docker/compiler.docker.js";
-const SUBMISSION_DIR = path.join(process.cwd(), 'oj');
+import fs from "fs-extra";
+import path from "path";
+import {SUBMISSION_DIR} from "../utils/Constant.js";
 
 export const executorCpp = async (problemId, source, numberOfTest) => {
     const submissionId = uuidv4();
-    const tmpRoot = path.join(SUBMISSION_DIR, submissionId);
-    await fs.mkdirp(tmpRoot);
-
-
-
-
-    // Ghi source
-    let fileName, buildCmd, runCmd, image;
-    image = 'oj-cpp:1.0';
-    fileName = 'Main.cpp';
-    const filePath = path.join(tmpRoot, 'Main.cpp');
-    await fs.writeFile(filePath, source);
-
-    // Kiểm tra file tồn tại trên host để debug
-    if (!await fs.pathExists(filePath)) {
-        return res.json({status: 'INTERNAL_ERROR', message: 'Failed to write source file on host' });
-    }
-
-    buildCmd = `mkdir -p /work/${submissionId} && \
-g++ -std=gnu++17 -O2 -pipe -static -s /work/${submissionId}/Main.cpp \
+    const filePath = `${submissionId}/Main.cpp`;
+    const buildCmd = `mkdir -p /work/${submissionId} && \
+g++ -std=gnu++17 -O2 -pipe -static -s /work/${filePath} \
 -o /work/${submissionId}/Main || echo __CE__:$? >&2`;
-
-    runCmd = './Main';
 
     // Compile trong container riêng
     const isBuild = await runInContainer({
         cmd: buildCmd,
         submissionId: submissionId,
         isBuild: true,
-        limits: { timeMs: 2000, memoryMb: 512 }
+        limits: { timeMs: 2000, memoryMb: 512 },
+        sourceCode: source
     });
-    //
+    // check successful build
     if (isBuild !== true){
         return isBuild;
     }
@@ -45,8 +28,10 @@ g++ -std=gnu++17 -O2 -pipe -static -s /work/${submissionId}/Main.cpp \
         problemId: problemId,
         cmd: buildCmd,
         submissionId: submissionId,
-        noOfTests: numberOfTest,
+        noOfTests: 40,
         limits: { timeMs: 2000, memoryMb: 512 }
     });
+    fs.removeSync(path.join(SUBMISSION_DIR, submissionId));
+    console.log(`Folder ${submissionId} was removed`);
     return res;
 }
