@@ -1,6 +1,7 @@
 import response from '../helpers/response.js';
 import problemModels from "../models/problem.models.js";
 import {executorCpp} from "../executor/cpp.executor.js";
+import {getAllTestCaseFromS3} from "../method/testcase.method.js";
 
 export const submitProblem = async (req, res, next) => {
     try {
@@ -10,11 +11,36 @@ export const submitProblem = async (req, res, next) => {
         // if (problem == null) {
         //     return response.sendError(res, "Problem not found", 404);
         // }
-        const resultFromExecution = await executorCpp(problemId, source, 10)
+        const resultFromExecution = await executorCpp('hehe', problemId, source, 20)
         return response.sendSuccess(res, resultFromExecution);
     }
     catch (error) {
         console.error(error)
         next(error)
+    }
+}
+
+export const submitProblemFromKafka = async(data) => {
+    function checkProblemPath(problemId, noOfTestCase) {
+        getAllTestCaseFromS3(problemId, noOfTestCase);
+        console.log(`${problemId} - ${noOfTestCase}`);
+    }
+
+    try {
+        const { problem, _id, language, source } = data;
+        checkProblemPath(problem._id, problem.numberOfTestCases);
+        let resultFromExecution;
+        switch (language) {
+            case 'cpp':
+                resultFromExecution = await executorCpp(_id, problem._id, source, problem.numberOfTestCases, problem.time, problem.memory);
+                break
+            default:
+                resultFromExecution = await executorCpp(_id, problem._id, source, problem.numberOfTestCases, problem.time, problem.memory);
+        }
+        return resultFromExecution;
+    }
+    catch (error) {
+        console.error(error)
+        throw error
     }
 }
