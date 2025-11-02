@@ -8,6 +8,7 @@ import * as test from "node:test";
 const docker = new Docker();
 const POOL_SIZE = 5;
 const IMAGE = 'oj-cpp:1.0';
+const IMAGE_V2 = 'oj:lastest';
 const pool = [];
 const mutex = new Mutex();
 let initializing = false;
@@ -41,7 +42,7 @@ async function initPool() {
     console.log('Pool initialized with', pool.length, 'containers.');
 }
 async function getContainerCompiler(id){
-    const containerName = `compiler-${id}`;
+    const containerName = `compiler-v2-${id}`;
     let container;
     container = docker.getContainer(containerName);
     try{
@@ -59,7 +60,8 @@ async function getContainerCompiler(id){
         if (error.statusCode === 404){
             container = await docker.createContainer({
                 name: containerName,
-                Image: IMAGE,
+                // Image: IMAGE,
+                Image: IMAGE_V2,
                 Tty: false,
                 WorkingDir: '/work',
                 User: '0:0',
@@ -70,7 +72,7 @@ async function getContainerCompiler(id){
                     PidsLimit: 128,
                     ReadonlyRootfs: false,
                     Binds: [
-                        `${PROBLEMSET_DIR}:/problems:ro`,
+                        `${PROBLEMSET_DIR}:/problems:ro,rslave`,
                         `${SUBMISSION_DIR}:/work`
                     ],
                     Ulimits: [
@@ -96,7 +98,8 @@ async function getContainerFromPool() {
         } else {
             console.warn('Pool empty, creating temporary container...');
             const tempContainer = await docker.createContainer({
-                Image: IMAGE,
+                // Image: IMAGE,
+                Image: IMAGE_V2,
                 Tty: false,
                 WorkingDir: '/work',
                 User: '0:0',

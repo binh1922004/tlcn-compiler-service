@@ -1,7 +1,7 @@
 import express from 'express';
-import {createProblem} from "../controllers/problem.controller.js";
+import {createProblem, updateTestcase} from "../controllers/problem.controller.js";
 const router = express.Router()
 
 router.post('/create', createProblem)
-
+router.post('/test-case/pull', updateTestcase)
 export default router;

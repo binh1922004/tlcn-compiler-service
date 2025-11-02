@@ -1,4 +1,4 @@
-import {ApiSuccessResponse, ApiErrorResponse} from '../utils/apiResponse.js';
+import {ApiSuccessResponse, ApiErrorResponse} from '../utils/ApiResponse.js';
 function sendSuccess(res, data, message = 'Success', status = 200) {
     const response = new ApiSuccessResponse(data, message, status);
     return res.status(status).json(response);
