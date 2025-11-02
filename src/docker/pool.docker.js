@@ -74,7 +74,7 @@ async function getContainerCompiler(id){
                     PidsLimit: 128,
                     ReadonlyRootfs: false,
                     Binds: [
-                        `${PROBLEM_VOLUME}:/problems:ro,rslave`,
+                        `${PROBLEM_VOLUME}:/problems`,
                         `${SUBMISSION_VOLUME}:/work`
                     ],
                     Ulimits: [
