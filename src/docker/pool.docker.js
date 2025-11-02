@@ -14,6 +14,7 @@ const mutex = new Mutex();
 let initializing = false;
 const PROBLEMSET_DIR = path.join(process.cwd(), 'problemset');
 const SUBMISSION_DIR = path.join(process.cwd(), 'oj');
+const VOLUME_NAME = 'code_submission-data';
 
 async function initPool() {
     if (initializing) return;
@@ -73,7 +74,7 @@ async function getContainerCompiler(id){
                     ReadonlyRootfs: false,
                     Binds: [
                         `${PROBLEMSET_DIR}:/problems:ro,rslave`,
-                        `${SUBMISSION_DIR}:/work`
+                        `${VOLUME_NAME}:/work`
                     ],
                     Ulimits: [
                         { Name: 'fsize', Soft: 1048576 * 50, Hard: 1048576 * 50 }
