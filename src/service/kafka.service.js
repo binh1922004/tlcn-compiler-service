@@ -6,6 +6,7 @@ const KafkaProducerSingleton = (function () {
     let instance;
 
     function init() {
+        console.log("Initializing KafkaProducerSingleton: ", config.kafka_broker);
         const client = new Kafka({
             clientId: 'bnoj-app',
             brokers: [config.kafka_broker||'kafka:9092'],
