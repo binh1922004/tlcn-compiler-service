@@ -16,4 +16,5 @@ export const config = {
     aws_secret_key: process.env.AWS_SECRET_ACCESS_KEY,
     bucket_name: process.env.BUCKET_NAME,
     bucket_region: process.env.BUCKET_REGION,
+    kafka_broker: process.env.KAFKA_BROKER,
 }

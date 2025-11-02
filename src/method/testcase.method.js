@@ -6,7 +6,7 @@ import {getFile} from "./s3.method.js";
 export const getAllTestCaseFromS3 = async (problemId, noOfTestcases) => {
     const problemDir = path.join(PROBLEM_DIR, problemId);
     if (await fs.pathExists(problemDir)) {
-        return;
+        return true;
     }
     await fs.mkdirp(problemDir);
     const inputDir = path.join(problemDir, 'inp');
@@ -37,4 +37,35 @@ export const getAllTestCaseFromS3 = async (problemId, noOfTestcases) => {
 
     // Download tất cả cùng lúc
     await Promise.all(downloadTasks);
+    return false;
+}
+
+export const checkProblemPath = async  (container, problemId, noOfTestCase) => {
+    const check = await getAllTestCaseFromS3(problemId, noOfTestCase);
+    if (check === false){
+        console.log(`Problem with ${problemId} not found`);
+        await refreshMountCache(container, problemId);
+        console.log(`${problemId} - ${noOfTestCase}`);
+    }
+}
+
+
+async function refreshMountCache(container, problemId) {
+    try {
+        // Method 1: Access the directory to trigger kernel refresh
+        const exec = await container.exec({
+            Cmd: ['/bin/sh', '-c', `find /problems/${problemId} -type f > /dev/null 2>&1 || true`],
+            AttachStdout: false,
+            AttachStderr: false
+        });
+
+        await exec.start({ hijack: false, stdin: false });
+
+        // Wait for cache refresh
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        console.log(`[CACHE] Refreshed mount cache for ${problemId}`);
+    } catch (err) {
+        console.warn(`[CACHE WARNING] Failed to refresh cache:`, err.message);
+    }
 }

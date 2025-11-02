@@ -1,5 +1,6 @@
 import { Kafka } from "kafkajs";
 import { submitProblemFromKafka } from "../controllers/submission.controller.js";
+import {config} from "../../config/env.js";
 
 const KafkaProducerSingleton = (function () {
     let instance;
@@ -7,7 +8,7 @@ const KafkaProducerSingleton = (function () {
     function init() {
         const client = new Kafka({
             clientId: 'bnoj-app',
-            brokers: ['localhost:9092'],
+            brokers: [config.kafka_broker||'kafka:9092'],
             connectionTimeout: 30000,
             requestTimeout: 45000,
         });
@@ -17,8 +18,11 @@ const KafkaProducerSingleton = (function () {
             groupId: 'bnoj-group-1'
         });
 
+        const admin = client.admin(); // ✅ Thêm admin client
+
         let isProducerConnected = false;
         let isConsumerConnected = false;
+        let isAdminConnected = false;
 
         return {
             // 🔴 FIX 1: Tách riêng connect cho producer
@@ -44,6 +48,49 @@ const KafkaProducerSingleton = (function () {
                         console.log('✅ Kafka Consumer connected');
                     } catch (error) {
                         console.error('❌ Consumer connection failed:', error);
+                        throw error;
+                    }
+                }
+            },
+
+            async createTopicIfNotExists(topic, numPartitions = 1, replicationFactor = 1) {
+                try {
+                    if (!isAdminConnected) {
+                        console.log('🔄 Connecting Kafka Admin...');
+                        await admin.connect();
+                        isAdminConnected = true;
+                        console.log('✅ Kafka Admin connected');
+                    }
+
+                    // Kiểm tra topic đã tồn tại chưa
+                    const existingTopics = await admin.listTopics();
+
+                    if (existingTopics.includes(topic)) {
+                        console.log(`ℹ️ Topic "${topic}" already exists`);
+                        return;
+                    }
+
+                    // Tạo topic mới
+                    await admin.createTopics({
+                        topics: [{
+                            topic: topic,
+                            numPartitions: numPartitions,
+                            replicationFactor: replicationFactor,
+                        }],
+                        waitForLeaders: true,
+                        timeout: 30000,
+                    });
+
+                    console.log(`✅ Topic "${topic}" created successfully`);
+
+                    // Đợi một chút để topic được khởi tạo hoàn toàn
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+
+                } catch (error) {
+                    if (error.type === 'TOPIC_ALREADY_EXISTS') {
+                        console.log(`ℹ️ Topic "${topic}" already exists`);
+                    } else {
+                        console.error(`❌ Failed to create topic "${topic}":`, error.message);
                         throw error;
                     }
                 }
@@ -144,5 +191,11 @@ export const sendMessage = async (topic, message) => {
     console.log(`[${time}] 📤 Sending message to topic "${topic}"`);
     return await kafka.sendMessage(topic, message);
 };
+
+export const createTopic = async (topic, numPartitions = 1, replicationFactor = 1) => {
+    const kafka = KafkaProducerSingleton.getInstance();
+    await kafka.createTopicIfNotExists(topic, numPartitions, replicationFactor);
+};
+
 
 export default KafkaProducerSingleton;

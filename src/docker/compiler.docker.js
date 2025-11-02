@@ -2,6 +2,7 @@ import path from "path";
 import fs from "fs-extra";
 import {getContainerFromPool, PROBLEMSET_DIR, releaseContainer} from "./pool.docker.js";
 import {Status} from "../utils/StatusType.js";
+import {checkProblemPath} from "../method/testcase.method.js";
 
 async function createFileInContainer(container, content, containerFilePath) {
     // Combine mkdir và create file trong 1 command
@@ -159,6 +160,7 @@ function parseStatsFromStderr(stderrData) {
 }
 
 async function runSingleTest(container, testId, problemId, submissionId, limits, problemDir) {
+    console.log('Container ID:', container.id);
     const inFile = `${problemDir}/inp/${problemId}_${testId}.inp`;
     const outFile = `${process.cwd()}/problemset/${problemId}/out/${problemId}_${testId}.out`;
 
@@ -166,6 +168,7 @@ async function runSingleTest(container, testId, problemId, submissionId, limits,
     const memoryLimitMb = limits.memoryMb || 256;
 
     const execCmd = `timeout ${timeoutSeconds}s bash -lc 'ulimit -v $((${memoryLimitMb}*1024)); /work/${submissionId}/Main < ${inFile}'`;
+    // const execCmd = `timeout ${timeoutSeconds}s /usr/local/bin/wrapper.sh /work/${submissionId}/Main < ${inFile}`;
 
     let got = '';
     let testStderr = '';
@@ -174,7 +177,6 @@ async function runSingleTest(container, testId, problemId, submissionId, limits,
     let exitCode = 0;
     let execTimeMs = 0;
     let memoryUsedMb = 0;
-    const start = Date.now();
 
     try {
         const execRun = await container.exec({
@@ -188,78 +190,54 @@ async function runSingleTest(container, testId, problemId, submissionId, limits,
         const stdout = [];
         const stderr = [];
 
-        //streaming data and collecting output
-        try {
-            container.modem.demuxStream(streamRun, {
-                write: (data) => {
-                    if (data && data.length > 0) {
-                        stdout.push(data);
-                    }
-                },
-            }, {
-                write: (data) => {
-                    if (data && data.length > 0) {
-                        stderr.push(data);
-                    }
-                },
-            });
-        } catch (err) {
-            console.error(`Demux error for test ${testId}:`, err.message);
-        }
-
-        const waitPromise = (async () => {
-            while (true) {
-                try {
-                    const inspect = await execRun.inspect();
-                    if (!inspect.Running) {
-                        return inspect.ExitCode || 0;
-                    }
-                    const elapsed = (Date.now() - start) / 1000;
-                    if (elapsed > timeoutSeconds + 1) {
-                        timedOut = true;
-                        return 124;
-                    }
-                    await new Promise(r => setTimeout(r, 50));
-                } catch (err) {
-                    return -1;
+        // Collect output
+        container.modem.demuxStream(streamRun, {
+            write: (data) => {
+                if (data && data.length > 0) {
+                    stdout.push(data);
                 }
-            }
-        })();
+            },
+        }, {
+            write: (data) => {
+                if (data && data.length > 0) {
+                    stderr.push(data);
+                }
+            },
+        });
 
-        exitCode = await Promise.race([
-            waitPromise,
-            new Promise(resolve => setTimeout(() => resolve(124), (timeoutSeconds + 1) * 1000))
-        ]);
+        // Wait for completion
+        await new Promise((resolve) => {
+            streamRun.on('end', resolve);
+            streamRun.on('error', resolve);
+        });
 
-        try {
-            const finalInspect = await execRun.inspect();
-            if (finalInspect.Running) {
-                timedOut = true;
-                await execRun.kill().catch(() => {});
-            }
-        } catch (err) {}
+        // Get exit code
+        const inspect = await execRun.inspect();
+        exitCode = inspect.ExitCode || 0;
 
-        await waitForStream(streamRun, 500);
-
-        try {
-            streamRun.destroy();
-        } catch (err) {}
-
+        // Parse output
+        console.log(stdout)
         got = Buffer.concat(stdout).toString('utf8');
         testStderr = Buffer.concat(stderr).toString('utf8');
 
-        // 🔴 FIX 2: Parse stats từ stderr
+        // 🔴 Parse stats từ stderr
         const stats = parseStatsFromStderr(testStderr);
         execTimeMs = stats.execTimeMs || 0;
         memoryUsedMb = stats.peakMemoryMB || 0;
 
-        const containerState = await container.inspect();
-        oomKilled = containerState.State.OOMKilled || false;
+        console.log(`Test ${testId} stats:`, { execTimeMs, memoryUsedMb, exitCode });
 
+        // Check timeout
+        if (exitCode === 124) {
+            timedOut = true;
+        }
+
+        // Check memory
         if (memoryUsedMb > memoryLimitMb) {
             oomKilled = true;
         }
 
+        // Read expected output
         let expected = '';
         try {
             expected = await fs.readFile(outFile, 'utf8');
@@ -275,32 +253,26 @@ async function runSingleTest(container, testId, problemId, submissionId, limits,
                 timedOut: false,
                 oomKilled: false,
                 exitCode: -1,
-                debug: { got, expected: 'N/A' }
             };
         }
 
+        // Determine status
         let status = Status.AC;
         if (timedOut) {
             status = Status.TLE;
         } else if (oomKilled) {
             status = Status.MLE;
-        } else if (exitCode !== 0 && exitCode !== 124) {
+        } else if (exitCode !== 0) {
             status = Status.RE;
         } else {
             const normalizedGot = normalize(got);
             const normalizedExpected = normalize(expected);
-
             const isMatch = normalizedGot === normalizedExpected;
 
             if (!isMatch) {
                 console.log(`\n❌ TEST ${testId} MISMATCH:`);
-                console.log(`Expected (${normalizedExpected.length} chars):`);
-                console.log(JSON.stringify(normalizedExpected.substring(0, 200)));
-                console.log(`\nGot (${normalizedGot.length} chars):`);
-                console.log(JSON.stringify(normalizedGot.substring(0, 200)));
-                console.log(`Expected hex:`, Buffer.from(normalizedExpected.substring(0, 50)).toString('hex'));
-                console.log(`Got hex:`, Buffer.from(normalizedGot.substring(0, 50)).toString('hex'));
-                console.log('---');
+                console.log(`Expected (${normalizedExpected.length} chars):`, normalizedExpected.substring(0, 100));
+                console.log(`Got (${normalizedGot.length} chars):`, normalizedGot.substring(0, 100));
             }
 
             status = isMatch ? Status.AC : Status.WA;
@@ -316,14 +288,6 @@ async function runSingleTest(container, testId, problemId, submissionId, limits,
             timedOut,
             oomKilled,
             exitCode,
-            debug: {
-                gotLength: got.length,
-                expectedLength: expected.length,
-                normalizedGotLength: normalize(got).length,
-                normalizedExpectedLength: normalize(expected).length,
-                execTimeMs: execTimeMs,
-                memoryMb: memoryUsedMb,
-            }
         };
 
     } catch (error) {
@@ -342,6 +306,7 @@ async function runSingleTest(container, testId, problemId, submissionId, limits,
     }
 }
 
+
 async function runCode(problemId, container, submissionId, noOfTests, limits) {
     noOfTests = noOfTests || 0;
     const results = [];
@@ -350,7 +315,7 @@ async function runCode(problemId, container, submissionId, noOfTests, limits) {
     let maxExecTimeMs = 0;
 
     const problemDir = `/problems/${problemId}`;
-
+    await checkProblemPath(container, problemId, noOfTests);
     console.log(`\n${'='.repeat(60)}`);
     console.log(`Starting ${noOfTests} tests for submission ${submissionId}`);
     console.log(`Time limit: ${limits.timeMs}s | Memory limit: ${limits.memoryMb || 256}MB`);

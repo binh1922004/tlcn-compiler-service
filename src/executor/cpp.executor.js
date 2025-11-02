@@ -29,7 +29,7 @@ g++ -std=gnu++17 -O2 -pipe -static -s /work/${filePath} \
         limits: { timeMs: time, memoryMb: memory }
     });
     console.log("Result after run test: ", res);
-    fs.removeSync(path.join(SUBMISSION_DIR, submissionId));
+    // fs.removeSync(path.join(SUBMISSION_DIR, submissionId));
     console.log(`Folder ${submissionId} was removed`);
     return res;
 }

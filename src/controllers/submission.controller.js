@@ -21,14 +21,8 @@ export const submitProblem = async (req, res, next) => {
 }
 
 export const submitProblemFromKafka = async(data) => {
-    function checkProblemPath(problemId, noOfTestCase) {
-        getAllTestCaseFromS3(problemId, noOfTestCase);
-        console.log(`${problemId} - ${noOfTestCase}`);
-    }
-
     try {
         const { problem, _id, language, source } = data;
-        checkProblemPath(problem._id, problem.numberOfTestCases);
         let resultFromExecution;
         switch (language) {
             case 'cpp':
