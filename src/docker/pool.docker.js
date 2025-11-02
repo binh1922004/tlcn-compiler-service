@@ -74,7 +74,7 @@ async function getContainerCompiler(id){
                     PidsLimit: 128,
                     ReadonlyRootfs: false,
                     Binds: [
-                        `${PROBLEMSET_DIR}:/problems:ro,rslave`,
+                        `${PROBLEM_VOLUME}:/problems:ro,rslave`,
                         `${SUBMISSION_VOLUME}:/work`
                     ],
                     Ulimits: [
@@ -111,7 +111,7 @@ async function getContainerFromPool() {
                     NanoCPUs: 1e9,
                     PidsLimit: 128,
                     ReadonlyRootfs: false,
-                    Binds: [`${PROBLEMSET_DIR}:/problems:ro`],
+                    Binds: [`${PROBLEM_VOLUME}:/problems:ro`],
                     Ulimits: [{ Name: 'fsize', Soft: 1048576 * 50, Hard: 1048576 * 50 }]
                 },
                 Cmd: ['/bin/bash', '-c', 'sleep infinity']
