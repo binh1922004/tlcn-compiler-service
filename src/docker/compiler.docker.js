@@ -162,7 +162,7 @@ function parseStatsFromStderr(stderrData) {
 async function runSingleTest(container, testId, problemId, submissionId, limits, problemDir) {
     console.log('Container ID:', container.id);
     const inFile = `${problemDir}/inp/${problemId}_${testId}.inp`;
-    const outFile = `${process.cwd()}/problemset/${problemId}/out/${problemId}_${testId}.out`;
+    const outFile = `${problemDir}/inp/${problemId}_${testId}.out`;
 
     const timeoutSeconds = limits.timeMs;
     const memoryLimitMb = limits.memoryMb || 256;
