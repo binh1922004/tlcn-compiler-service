@@ -3,6 +3,7 @@ import fs from "fs-extra";
 import {getContainerFromPool, PROBLEMSET_DIR, releaseContainer} from "./pool.docker.js";
 import {Status} from "../utils/StatusType.js";
 import {checkProblemPath} from "../method/testcase.method.js";
+import {PROBLEM_DIR} from "../utils/Constant.js";
 
 async function createFileInContainer(container, content, containerFilePath) {
     // Combine mkdir và create file trong 1 command
@@ -159,10 +160,10 @@ function parseStatsFromStderr(stderrData) {
     };
 }
 
-async function runSingleTest(container, testId, problemId, submissionId, limits, problemDir) {
+async function runSingleTest(container, testId, problemId, submissionId, limits, problemDir, outInputDir) {
     console.log('Container ID:', container.id);
     const inFile = `${problemDir}/inp/${problemId}_${testId}.inp`;
-    const outFile = `${problemDir}/inp/${problemId}_${testId}.out`;
+    const outFile = `${outInputDir}/${problemId}_${testId}.out`;
 
     const timeoutSeconds = limits.timeMs;
     const memoryLimitMb = limits.memoryMb || 256;
@@ -315,6 +316,7 @@ async function runCode(problemId, container, submissionId, noOfTests, limits) {
     let maxExecTimeMs = 0;
 
     const problemDir = `/problems/${problemId}`;
+    const outInputDir = path.join(PROBLEM_DIR, problemId, 'out');
     await checkProblemPath(container, problemId, noOfTests);
     console.log(`\n${'='.repeat(60)}`);
     console.log(`Starting ${noOfTests} tests for submission ${submissionId}`);
@@ -328,7 +330,8 @@ async function runCode(problemId, container, submissionId, noOfTests, limits) {
             problemId,
             submissionId,
             limits,
-            problemDir
+            problemDir,
+            outInputDir
         );
 
         maxMemoryMb = Math.max(maxMemoryMb, result.memoryMb);
