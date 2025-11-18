@@ -162,7 +162,7 @@ function parseStatsFromStderr(stderrData) {
 
 async function runSingleTest(container, testId, problemId, submissionId, limits, problemDir, outInputDir) {
     console.log('Container ID:', container.id);
-    const inFile = `${problemDir}/inp/${problemId}_${testId}.inp`;
+    const inFile = `${problemDir}/${problemId}_${testId}.inp`;
     const outFile = `${outInputDir}/${problemId}_${testId}.out`;
 
     const timeoutSeconds = limits.timeMs;
@@ -315,7 +315,7 @@ async function runCode(problemId, container, submissionId, noOfTests, limits) {
     let maxMemoryMb = 0;
     let maxExecTimeMs = 0;
 
-    const problemDir = `/problems/${problemId}`;
+    const problemDir = `/problems/${problemId}/inp`;
     const outInputDir = path.join(PROBLEM_DIR, problemId, 'out');
     await checkProblemPath(container, problemId, noOfTests);
     console.log(`\n${'='.repeat(60)}`);

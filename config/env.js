@@ -17,4 +17,6 @@ export const config = {
     bucket_name: process.env.BUCKET_NAME,
     bucket_region: process.env.BUCKET_REGION,
     kafka_broker: process.env.KAFKA_BROKER,
+    submission_volume: process.env.SUBMISSION_VOLUME,
+    problem_volume: process.env.PROBLEM_VOLUME,
 }

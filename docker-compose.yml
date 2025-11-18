@@ -55,3 +55,7 @@ services:
     depends_on:
       broker:
         condition: service_healthy
+volumes:
+  redis_data:
+  submission-data:
+  problem-data:

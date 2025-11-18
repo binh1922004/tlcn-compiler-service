@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs-extra';
 import * as test from "node:test";
+import {config} from "../../config/env.js";
 
 const docker = new Docker();
 const POOL_SIZE = 5;
@@ -14,8 +15,8 @@ const mutex = new Mutex();
 let initializing = false;
 const PROBLEMSET_DIR = path.join(process.cwd(), 'problemset');
 const SUBMISSION_DIR = path.join(process.cwd(), 'oj');
-const SUBMISSION_VOLUME = 'code_submission-data';
-const PROBLEM_VOLUME = 'code_problem-data';
+const SUBMISSION_VOLUME = config.submission_volume;
+const PROBLEM_VOLUME = config.problem_volume;
 
 async function initPool() {
     if (initializing) return;
