@@ -4,15 +4,19 @@ import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs-extra';
 import * as test from "node:test";
+import {config} from "../../config/env.js";
 
 const docker = new Docker();
 const POOL_SIZE = 5;
 const IMAGE = 'oj-cpp:1.0';
+const IMAGE_V2 = 'oj:lastest';
 const pool = [];
 const mutex = new Mutex();
 let initializing = false;
 const PROBLEMSET_DIR = path.join(process.cwd(), 'problemset');
 const SUBMISSION_DIR = path.join(process.cwd(), 'oj');
+const SUBMISSION_VOLUME = config.submission_volume;
+const PROBLEM_VOLUME = config.problem_volume;
 
 async function initPool() {
     if (initializing) return;
@@ -30,23 +34,7 @@ async function initPool() {
 
     for (let i = 0; i < POOL_SIZE; i++) {
         try {
-            const container = await docker.createContainer({
-                Image: IMAGE,
-                Tty: false,
-                WorkingDir: '/work',
-                User: '0:0',
-                HostConfig: {
-                    NetworkMode: 'none',
-                    Memory: 512 * 1024 * 1024,
-                    NanoCPUs: 1e9,
-                    PidsLimit: 128,
-                    ReadonlyRootfs: false,
-                    Binds: [`${PROBLEMSET_DIR}:/problems:ro`, `${SUBMISSION_DIR}:/work`],
-                    Ulimits: [{ Name: 'fsize', Soft: 1048576 * 50, Hard: 1048576 * 50 }]
-                },
-                Cmd: ['/bin/bash', '-c', 'sleep infinity']
-            });
-            await container.start();
+            const container = await getContainerCompiler(i);
             pool.push(container);
             console.log(`Container ${i + 1} created and started.`);
         } catch (err) {
@@ -56,16 +44,27 @@ async function initPool() {
     initializing = false;
     console.log('Pool initialized with', pool.length, 'containers.');
 }
-
-async function getContainerFromPool() {
-    const release = await mutex.acquire();
-    try {
-        if (pool.length > 0) {
-            return pool.shift();
+async function getContainerCompiler(id){
+    const containerName = `compiler-v2-${id}`;
+    let container;
+    container = docker.getContainer(containerName);
+    try{
+        const containerInfo = await container.inspect();
+        console.log(containerInfo.State);
+        const isRunning = containerInfo.State.Running;
+        if (!isRunning) {
+            console.log(`[INFO] Container ${containerName} exists but not running. Starting...`);
+            await container.start();
         } else {
-            console.warn('Pool empty, creating temporary container...');
-            const tempContainer = await docker.createContainer({
-                Image: IMAGE,
+            console.log(`[INFO] Container ${containerName} is already running.`);
+        }
+    }
+    catch (error) {
+        if (error.statusCode === 404){
+            container = await docker.createContainer({
+                name: containerName,
+                // Image: IMAGE,
+                Image: IMAGE_V2,
                 Tty: false,
                 WorkingDir: '/work',
                 User: '0:0',
@@ -75,7 +74,45 @@ async function getContainerFromPool() {
                     NanoCPUs: 1e9,
                     PidsLimit: 128,
                     ReadonlyRootfs: false,
-                    Binds: [`${PROBLEMSET_DIR}:/problems:ro`],
+                    Binds: [
+                        `${PROBLEM_VOLUME}:/problems`,
+                        `${SUBMISSION_VOLUME}:/work`
+                    ],
+                    Ulimits: [
+                        { Name: 'fsize', Soft: 1048576 * 50, Hard: 1048576 * 50 }
+                    ]
+                },
+                Cmd: ['/bin/bash', '-c', 'sleep infinity']
+            });
+            await container.start();
+        }
+        else{
+            console.error(`[ERROR] Failed to get or create container ${containerName}:`, error);
+            throw error;
+        }
+    }
+    return container;
+}
+async function getContainerFromPool() {
+    const release = await mutex.acquire();
+    try {
+        if (pool.length > 0) {
+            return pool.shift();
+        } else {
+            console.warn('Pool empty, creating temporary container...');
+            const tempContainer = await docker.createContainer({
+                // Image: IMAGE,
+                Image: IMAGE_V2,
+                Tty: false,
+                WorkingDir: '/work',
+                User: '0:0',
+                HostConfig: {
+                    NetworkMode: 'none',
+                    Memory: 512 * 1024 * 1024,
+                    NanoCPUs: 1e9,
+                    PidsLimit: 128,
+                    ReadonlyRootfs: false,
+                    Binds: [`${PROBLEM_VOLUME}:/problems:ro`],
                     Ulimits: [{ Name: 'fsize', Soft: 1048576 * 50, Hard: 1048576 * 50 }]
                 },
                 Cmd: ['/bin/bash', '-c', 'sleep infinity']

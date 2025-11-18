@@ -13,6 +13,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.893.0",
     "async-mutex": "^0.5.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
@@ -22,6 +23,7 @@
     "express": "^5.1.0",
     "fs-extra": "^11.3.1",
     "jsonwebtoken": "^9.0.2",
+    "kafkajs": "^2.2.4",
     "lowdb": "^7.0.1",
     "mongoose": "^8.16.3",
     "nodemon": "^3.1.10",
