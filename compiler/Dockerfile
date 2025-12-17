@@ -10,10 +10,6 @@ RUN apt-get update && apt-get install -y \
 # Create directories
 RUN mkdir -p /work /problems
 
-# Copy wrapper script từ cùng thư mục với Dockerfile
-COPY ../wrapper.sh /usr/local/bin/wrapper.sh
-RUN chmod +x /usr/local/bin/wrapper.sh
-
 WORKDIR /work
 
 CMD ["/bin/bash"]
