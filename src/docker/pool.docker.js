@@ -10,6 +10,7 @@ const docker = new Docker();
 const POOL_SIZE = 5;
 const IMAGE = 'oj-cpp:1.0';
 const IMAGE_V2 = 'oj:lastest';
+const IMAGE_V3 = 'oj:3.0';
 const pool = [];
 const mutex = new Mutex();
 let initializing = false;
@@ -64,7 +65,7 @@ async function getContainerCompiler(id){
             container = await docker.createContainer({
                 name: containerName,
                 // Image: IMAGE,
-                Image: IMAGE_V2,
+                Image: IMAGE_V3,
                 Tty: false,
                 WorkingDir: '/work',
                 User: '0:0',
@@ -102,7 +103,7 @@ async function getContainerFromPool() {
             console.warn('Pool empty, creating temporary container...');
             const tempContainer = await docker.createContainer({
                 // Image: IMAGE,
-                Image: IMAGE_V2,
+                Image: IMAGE_V3,
                 Tty: false,
                 WorkingDir: '/work',
                 User: '0:0',

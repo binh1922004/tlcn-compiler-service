@@ -50,6 +50,7 @@ services:
       - problem-data:/app/problems
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock
+      - KAFKA_BROKER=broker:9092
     networks:
       - bnoj-tier
     depends_on:

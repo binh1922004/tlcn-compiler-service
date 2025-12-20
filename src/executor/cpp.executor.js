@@ -17,7 +17,8 @@ g++ -std=gnu++17 -O2 -pipe -static -s /work/${filePath} \
         submissionId: submissionId,
         isBuild: true,
         limits: { timeMs: time, memoryMb: memory },
-        sourceCode: source
+        sourceCode: source,
+        language: 'cpp',
     });
     console.log(isBuild);
     console.log(`Source code: ${source}`);
@@ -26,10 +27,11 @@ g++ -std=gnu++17 -O2 -pipe -static -s /work/${filePath} \
         cmd: buildCmd,
         submissionId: submissionId,
         noOfTests: numberOfTest,
-        limits: { timeMs: time, memoryMb: memory }
+        limits: { timeMs: time, memoryMb: memory },
+        language: 'cpp',
     });
     console.log("Result after run test: ", res);
-    // fs.removeSync(path.join(SUBMISSION_DIR, submissionId));
+    fs.removeSync(path.join(SUBMISSION_DIR, submissionId));
     console.log(`Folder ${submissionId} was removed`);
     return res;
 }

@@ -1,6 +1,6 @@
 import path from "path";
 import fs from "fs-extra";
-import {getContainerFromPool, PROBLEMSET_DIR, releaseContainer} from "./pool.docker.js";
+import {getContainerFromPool, releaseContainer} from "./pool.docker.js";
 import {Status} from "../utils/StatusType.js";
 import {checkProblemPath} from "../method/testcase.method.js";
 import {PROBLEM_DIR} from "../utils/Constant.js";
@@ -42,14 +42,28 @@ ${content}
     }
 }
 
-async function buildCode(container, submissionId, cmd, sourceCode) {
+async function buildCode(container, submissionId, cmd, sourceCode, language = 'cpp') {
     const start = Date.now();
     let stderr = '';
     try {
         // 1. Create source file directly in container
-        const containerSourcePath = `/work/${submissionId}/Main.cpp`;
+        let containerSourcePath = `/work/${submissionId}/Main`;
+        switch (language){
+            case 'cpp':
+                containerSourcePath += '.cpp';
+                break;
+            case 'python':
+                containerSourcePath += '.py';
+                break;
+            default:
+                containerSourcePath += '.cpp';
+        }
         await createFileInContainer(container, sourceCode, containerSourcePath);
 
+
+        if (language !== 'cpp'){
+            return true;
+        }
         // Compile
         const compile = await container.exec({
             Cmd: ['/bin/sh', '-lc', cmd],
@@ -102,43 +116,6 @@ function normalize(str) {
         .join('\n');
 }
 
-// 🔴 FIX 2: Thêm delay để đảm bảo stream xong
-async function waitForStream(streamRun) {
-    return new Promise((resolve) => {
-        let resolved = false;
-
-        const timeout = setTimeout(() => {
-            if (!resolved) {
-                resolved = true;
-                resolve();
-            }
-        });
-
-        streamRun.on('end', () => {
-            if (!resolved) {
-                resolved = true;
-                clearTimeout(timeout);
-                resolve();
-            }
-        });
-
-        streamRun.on('close', () => {
-            if (!resolved) {
-                resolved = true;
-                clearTimeout(timeout);
-                resolve();
-            }
-        });
-
-        streamRun.on('error', () => {
-            if (!resolved) {
-                resolved = true;
-                clearTimeout(timeout);
-                resolve();
-            }
-        });
-    });
-}
 
 function parseStatsFromStderr(stderrData) {
     try {
@@ -160,7 +137,20 @@ function parseStatsFromStderr(stderrData) {
     };
 }
 
-async function runSingleTest(container, testId, problemId, submissionId, limits, problemDir, outInputDir) {
+function getExecCmd(submissionId, language, inFile, timeoutSeconds, memoryLimitMb) {
+    let executableCmd;
+    const cmd = `/scripts/run_and_measure.sh ${language} ${submissionId} ${inFile} ${timeoutSeconds} ${memoryLimitMb}`;
+    // if (language === 'cpp') {
+    //     executableCmd = `/work/${submissionId}/Main`;
+    // } else if (language === 'python') {
+    //     executableCmd = `python3 /work/${submissionId}/Main.py`;
+    // }
+    //
+    // return `timeout ${timeoutSeconds}s bash -lc 'ulimit -v $((${memoryLimitMb}*1024)); ${executableCmd} < ${inFile}'`;
+    return cmd;
+}
+
+async function runSingleTest(container, testId, problemId, submissionId, limits, problemDir, outInputDir, language) {
     console.log('Container ID:', container.id);
     const inFile = `${problemDir}/${problemId}_${testId}.inp`;
     const outFile = `${outInputDir}/${problemId}_${testId}.out`;
@@ -168,7 +158,8 @@ async function runSingleTest(container, testId, problemId, submissionId, limits,
     const timeoutSeconds = limits.timeMs;
     const memoryLimitMb = limits.memoryMb || 256;
 
-    const execCmd = `timeout ${timeoutSeconds}s bash -lc 'ulimit -v $((${memoryLimitMb}*1024)); /work/${submissionId}/Main < ${inFile}'`;
+    const execCmd = getExecCmd(submissionId, language, inFile, timeoutSeconds, memoryLimitMb);
+    console.log(`ExecCmd: ${execCmd}`);
     // const execCmd = `timeout ${timeoutSeconds}s /usr/local/bin/wrapper.sh /work/${submissionId}/Main < ${inFile}`;
 
     let got = '';
@@ -217,12 +208,14 @@ async function runSingleTest(container, testId, problemId, submissionId, limits,
         exitCode = inspect.ExitCode || 0;
 
         // Parse output
-        console.log(stdout)
         got = Buffer.concat(stdout).toString('utf8');
         testStderr = Buffer.concat(stderr).toString('utf8');
 
         // 🔴 Parse stats từ stderr
-        const stats = parseStatsFromStderr(testStderr);
+        console.log(`${got}`);
+        got = JSON.parse(got);
+        console.log(got);
+        const stats = got.stats;
         execTimeMs = stats.execTimeMs || 0;
         memoryUsedMb = stats.peakMemoryMB || 0;
 
@@ -249,7 +242,7 @@ async function runSingleTest(container, testId, problemId, submissionId, limits,
                 status: Status.RE,
                 execTimeMs: execTimeMs,
                 memoryMb: memoryUsedMb,
-                truncatedStdout: got.substring(0, 500),
+                truncatedStdout: got.stdout.substring(0, 500),
                 truncatedStderr: `Cannot read expected output: ${err.message}`,
                 timedOut: false,
                 oomKilled: false,
@@ -266,7 +259,7 @@ async function runSingleTest(container, testId, problemId, submissionId, limits,
         } else if (exitCode !== 0) {
             status = Status.RE;
         } else {
-            const normalizedGot = normalize(got);
+            const normalizedGot = normalize(got.stdout);
             const normalizedExpected = normalize(expected);
             const isMatch = normalizedGot === normalizedExpected;
 
@@ -284,7 +277,7 @@ async function runSingleTest(container, testId, problemId, submissionId, limits,
             status,
             execTimeMs: execTimeMs,
             memoryMb: memoryUsedMb,
-            truncatedStdout: got.substring(0, 500),
+            truncatedStdout: got.stdout.substring(0, 500),
             truncatedStderr: testStderr.substring(0, 500),
             timedOut,
             oomKilled,
@@ -308,7 +301,7 @@ async function runSingleTest(container, testId, problemId, submissionId, limits,
 }
 
 
-async function runCode(problemId, container, submissionId, noOfTests, limits) {
+async function runCode(problemId, container, submissionId, noOfTests, limits, language = 'cpp') {
     noOfTests = noOfTests || 0;
     const results = [];
     let passed = 0;
@@ -317,7 +310,7 @@ async function runCode(problemId, container, submissionId, noOfTests, limits) {
 
     const problemDir = `/problems/${problemId}/inp`;
     const outInputDir = path.join(PROBLEM_DIR, problemId, 'out');
-    await checkProblemPath(container, problemId, noOfTests);
+    await checkProblemPath(container, problemId);
     console.log(`\n${'='.repeat(60)}`);
     console.log(`Starting ${noOfTests} tests for submission ${submissionId}`);
     console.log(`Time limit: ${limits.timeMs}s | Memory limit: ${limits.memoryMb || 256}MB`);
@@ -331,7 +324,8 @@ async function runCode(problemId, container, submissionId, noOfTests, limits) {
             submissionId,
             limits,
             problemDir,
-            outInputDir
+            outInputDir,
+            language
         );
 
         maxMemoryMb = Math.max(maxMemoryMb, result.memoryMb);
@@ -382,11 +376,11 @@ async function runCode(problemId, container, submissionId, noOfTests, limits) {
     };
 }
 
-export default async function runInContainer({ problemId, submissionId, isBuild = false, cmd, limits, noOfTests = 10, sourceCode }) {
+export default async function runInContainer({ problemId, submissionId, isBuild = false, cmd, limits, noOfTests = 10, sourceCode, language }) {
     const container = await getContainerFromPool();
     try{
         if (isBuild){
-            const res = await buildCode(container, submissionId, cmd, sourceCode);
+            const res = await buildCode(container, submissionId, cmd, sourceCode, language);
             await releaseContainer(container);
             if (res === true) {
                 return true;
@@ -397,7 +391,7 @@ export default async function runInContainer({ problemId, submissionId, isBuild 
         }
         else{
             // const build = await buildCode(container, submissionId, cmd);
-            const res = await runCode(problemId, container, submissionId, noOfTests, limits)
+            const res = await runCode(problemId, container, submissionId, noOfTests, limits, language);
             await releaseContainer(container);
             return res;
         }

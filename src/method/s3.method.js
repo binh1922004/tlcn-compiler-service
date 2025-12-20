@@ -20,7 +20,7 @@ export const getFile = async (key) => {
         Bucket: bucketName,
         Key: key,
     }
-
+    console.log('Accessing S3 with params:', params)
     const command = new GetObjectCommand(params);
     const response = await s3.send(command);
 
