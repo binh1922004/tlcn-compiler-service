@@ -143,3 +143,4 @@ vite.config.ts.timestamp-*
 oj/
 !oj/wrapper.cpp
 problemset/
+problems/
