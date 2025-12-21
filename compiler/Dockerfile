@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-dev \
     bc \
+    dos2unix \
     && rm -rf /var/lib/apt/lists/*
 
 RUN ln -s /usr/bin/python3 /usr/bin/python && \
@@ -25,6 +26,10 @@ RUN useradd -m -s /bin/bash judgeuser && \
 
 # Copy runner scripts
 COPY run_and_measure.sh /scripts/run_and_measure.sh
+
+# Convert line endings to Unix format
+RUN dos2unix /scripts/run_and_measure.sh
+
 RUN chmod +x /scripts/*.sh
 
 WORKDIR /work
