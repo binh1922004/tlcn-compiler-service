@@ -49,7 +49,7 @@ export const getAllTestCaseFromS3 = async (problemVersion) => {
     }
     // console.log(`Problem zip file found in S3: ${zipBuffer}`);
     await unzipAndSave(zipBuffer.buffer, problemDir);
-    return false;
+    return true;
 }
 
 const unzipAndSave = async (zipBuffer, problemDir) => {
