@@ -26,12 +26,13 @@ RUN useradd -m -s /bin/bash judgeuser && \
 
 # Copy runner scripts
 COPY run_and_measure.sh /scripts/run_and_measure.sh
+COPY wrapper.cpp wrapper.cpp
 
 # Convert line endings to Unix format
 RUN dos2unix /scripts/run_and_measure.sh
 
 RUN chmod +x /scripts/*.sh
-
+RUN chmod +x wrapper.cpp
 WORKDIR /work
 USER judgeuser
 

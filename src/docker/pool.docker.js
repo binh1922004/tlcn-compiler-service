@@ -102,6 +102,7 @@ async function getContainerFromPool() {
         } else {
             console.warn('Pool empty, creating temporary container...');
             const tempContainer = await docker.createContainer({
+                name: containerName,
                 // Image: IMAGE,
                 Image: IMAGE_V3,
                 Tty: false,
@@ -113,8 +114,13 @@ async function getContainerFromPool() {
                     NanoCPUs: 1e9,
                     PidsLimit: 128,
                     ReadonlyRootfs: false,
-                    Binds: [`${PROBLEM_VOLUME}:/problems:ro`],
-                    Ulimits: [{ Name: 'fsize', Soft: 1048576 * 50, Hard: 1048576 * 50 }]
+                    Binds: [
+                        `${PROBLEM_VOLUME}:/problems`,
+                        `${SUBMISSION_VOLUME}:/work`
+                    ],
+                    Ulimits: [
+                        { Name: 'fsize', Soft: 1048576 * 50, Hard: 1048576 * 50 }
+                    ]
                 },
                 Cmd: ['/bin/bash', '-c', 'sleep infinity']
             });
