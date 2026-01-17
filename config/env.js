@@ -19,4 +19,5 @@ export const config = {
     kafka_broker: process.env.KAFKA_BROKER,
     submission_volume: process.env.SUBMISSION_VOLUME,
     problem_volume: process.env.PROBLEM_VOLUME,
+    host_id: process.env.HOST,
 }

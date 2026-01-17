@@ -159,7 +159,6 @@ async function runSingleTest(container, testId, problemId, submissionId, limits,
     const memoryLimitMb = limits.memoryMb || 256;
 
     const execCmd = getExecCmd(submissionId, language, inFile, timeoutSeconds, memoryLimitMb);
-    console.log(`ExecCmd: ${execCmd}`);
     // const execCmd = `timeout ${timeoutSeconds}s /usr/local/bin/wrapper.sh /work/${submissionId}/Main < ${inFile}`;
 
     let got = '';
@@ -219,8 +218,6 @@ async function runSingleTest(container, testId, problemId, submissionId, limits,
         execTimeMs = stats.execTimeMs || 0;
         memoryUsedMb = stats.peakMemoryMB || 0;
 
-        console.log(`Test ${testId} stats:`, { execTimeMs, memoryUsedMb, exitCode });
-
         // Check timeout
         if (exitCode === 124) {
             timedOut = true;
@@ -263,11 +260,11 @@ async function runSingleTest(container, testId, problemId, submissionId, limits,
             const normalizedExpected = normalize(expected);
             const isMatch = normalizedGot === normalizedExpected;
 
-            if (!isMatch) {
-                console.log(`\n❌ TEST ${testId} MISMATCH:`);
-                console.log(`Expected (${normalizedExpected.length} chars):`, normalizedExpected.substring(0, 100));
-                console.log(`Got (${normalizedGot.length} chars):`, normalizedGot.substring(0, 100));
-            }
+            // if (!isMatch) {
+            //     console.log(`\n❌ TEST ${testId} MISMATCH:`);
+            //     console.log(`Expected (${normalizedExpected.length} chars):`, normalizedExpected.substring(0, 100));
+            //     console.log(`Got (${normalizedGot.length} chars):`, normalizedGot.substring(0, 100));
+            // }
 
             status = isMatch ? Status.AC : Status.WA;
         }
@@ -311,10 +308,6 @@ async function runCode(problemId, container, submissionId, noOfTests, limits, la
     const problemDir = `/problems/${problemId}/inp`;
     const outInputDir = path.join(PROBLEM_DIR, problemId, 'out');
     await checkProblemPath(container, problemId);
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`Starting ${noOfTests} tests for submission ${submissionId}`);
-    console.log(`Time limit: ${limits.timeMs}s | Memory limit: ${limits.memoryMb || 256}MB`);
-    console.log(`${'='.repeat(60)}\n`);
 
     for (let testId = 1; testId <= noOfTests; testId++) {
         const result = await runSingleTest(
@@ -341,7 +334,6 @@ async function runCode(problemId, container, submissionId, noOfTests, limits, la
         results.push(result);
 
         if (result.status !== Status.AC) {
-            console.log(`Test ${testId} failed - stopping execution`);
             break;
         }
 
